@@ -16,11 +16,19 @@
 
 package io.appium.uiautomator2.utils;
 
+import android.annotation.SuppressLint;
+import android.util.Log;
+import android.app.UiAutomation;
+
+import java.lang.reflect.InvocationTargetException;
+
+import androidx.test.uiautomator.Configurator;
 import android.os.Build;
 import android.os.SystemClock;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -58,6 +66,26 @@ public class AXWindowHelpers {
         cachedWindowRoots = null;
     }
 
+    @SuppressLint("WrongConstant")
+    public static void refreshUiAutomation() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException, InstantiationException, NoSuchFieldException {
+        Device.waitForIdle();
+        clearAccessibilityCache();
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+
+            UiAutomation uiAutomation = UiAutomatorBridge.getInstance()
+                    .getUiAutomation();
+            // reconnect UiAutomation
+            Class<UiAutomation> uiAutomationClass = UiAutomation.class;
+            Method disconnect = uiAutomationClass.getMethod("disconnect");
+            Method connect = uiAutomationClass.getMethod("connect", int.class);
+            disconnect.setAccessible(true);
+            connect.setAccessible(true);
+            disconnect.invoke(uiAutomation);
+            connect.invoke(uiAutomation, Configurator.getInstance().getUiAutomationFlags());
+        }
+    }
+
     private static AccessibilityNodeInfo getActiveWindowRoot() {
         long start = SystemClock.uptimeMillis();
         while (SystemClock.uptimeMillis() - start < AX_ROOT_RETRIEVAL_TIMEOUT_MS) {
@@ -65,8 +93,15 @@ public class AXWindowHelpers {
                 AccessibilityNodeInfo root = UiAutomatorBridge.getInstance().getAccessibilityRootNode();
                 if (root != null) {
                     return root;
+                } else {
+                    refreshUiAutomation();
                 }
             } catch (Exception e) {
+                try {
+                    refreshUiAutomation();
+                } catch (Exception ex) {
+                    Logger.info(ex.getMessage());
+                }
                 /*
                  * Sometimes getAccessibilityRootNode() throws
                  * "java.lang.IllegalStateException: Cannot perform this action on a sealed instance."
