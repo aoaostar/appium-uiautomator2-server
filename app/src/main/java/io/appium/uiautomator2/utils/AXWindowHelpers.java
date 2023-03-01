@@ -16,23 +16,13 @@
 
 package io.appium.uiautomator2.utils;
 
-import android.annotation.SuppressLint;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
-
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-
-import androidx.test.uiautomator.Configurator;
 import android.os.Build;
 import android.os.SystemClock;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
-
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-
+import androidx.test.uiautomator.Configurator;
 import androidx.test.uiautomator.UiDevice;
 import io.appium.uiautomator2.common.exceptions.UiAutomator2Exception;
 import io.appium.uiautomator2.core.UiAutomatorBridge;
@@ -40,7 +30,14 @@ import io.appium.uiautomator2.model.internal.CustomUiDevice;
 import io.appium.uiautomator2.model.settings.EnableMultiWindows;
 import io.appium.uiautomator2.model.settings.Settings;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+
 import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
+import static io.appium.uiautomator2.utils.ReflectionUtils.*;
 
 public class AXWindowHelpers {
     private static final long AX_ROOT_RETRIEVAL_TIMEOUT_MS = 10000;
@@ -70,37 +67,29 @@ public class AXWindowHelpers {
         cachedWindowRoots = null;
     }
 
-    @SuppressLint("WrongConstant")
-    public static void refreshUiAutomation() {
+    public static void refreshUiAutomator() {
         Device.waitForIdle();
-        clearAccessibilityCache();
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-            try{
-                Logger.info("refreshUiAutomation");
+            try {
                 UiAutomation uiAutomation = UiAutomatorBridge.getInstance()
                         .getUiAutomation();
                 // reconnect UiAutomation
-                Class<UiAutomation> uiAutomationClass = UiAutomation.class;
-                Method disconnect = uiAutomationClass.getMethod("disconnect");
-                Method connect = uiAutomationClass.getMethod("connect", int.class);
-                disconnect.setAccessible(true);
-                connect.setAccessible(true);
-                disconnect.invoke(uiAutomation);
-                connect.invoke(uiAutomation, Configurator.getInstance().getUiAutomationFlags());
+                Method disconnect = getMethod(UiAutomation.class, "disconnect");
+                Method connect = getMethod(UiAutomation.class, "connect", int.class);
+                invoke(disconnect, uiAutomation);
+                invoke(connect, uiAutomation, Configurator.getInstance().getUiAutomationFlags());
+
                 // reload UiDevice
-                Class<UiDevice> uiDeviceClass = UiDevice.class;
-                Constructor<UiDevice> declaredConstructor = uiDeviceClass.getDeclaredConstructor(Instrumentation.class);
-                declaredConstructor.setAccessible(true);
-                UiDevice uiDevice = declaredConstructor.newInstance(getInstrumentation());
-                Field sInstance = uiDeviceClass.getDeclaredField("sInstance");
+                Constructor<?> uiDeviceConstructor = getConstructor(UiDevice.class, Instrumentation.class);
+                UiDevice uiDevice = (UiDevice) uiDeviceConstructor.newInstance(getInstrumentation());
+                Field sInstance = UiDevice.class.getDeclaredField("sInstance");
                 sInstance.setAccessible(true);
                 sInstance.set(UiDevice.class, uiDevice);
-            }catch (Exception e)
-            {
-                Logger.error(String.format("refreshUiAutomation error: %s", e));
-            }
 
+            } catch (Exception e) {
+                Logger.error(String.format("refreshUiAutomator error: %s", e));
+            }
         }
     }
 
@@ -112,10 +101,10 @@ public class AXWindowHelpers {
                 if (root != null) {
                     return root;
                 } else {
-                    refreshUiAutomation();
+                    refreshUiAutomator();
                 }
             } catch (Exception e) {
-                refreshUiAutomation();
+                refreshUiAutomator();
                 /*
                  * Sometimes getAccessibilityRootNode() throws
                  * "java.lang.IllegalStateException: Cannot perform this action on a sealed instance."
@@ -133,7 +122,7 @@ public class AXWindowHelpers {
     }
 
     private static AccessibilityNodeInfo[] getWindowRoots() {
-        refreshUiAutomation();
+        refreshUiAutomator();
         List<AccessibilityNodeInfo> result = new ArrayList<>();
         List<AccessibilityWindowInfo> windows = CustomUiDevice.getInstance()
                 .getUiAutomation()
